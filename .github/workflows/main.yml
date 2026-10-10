@@ -4,8 +4,7 @@ name: Compilar Mis Finanzas APK
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
@@ -18,18 +17,24 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java
+      - name: Configurar Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
 
       - name: Preparar Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: ''
 
-      - name: Instalar herramientas Android
+      - name: Instalar SDK Android
         run: |
           sdkmanager --install \
             "platform-tools" \
@@ -40,31 +45,29 @@ jobs:
         shell: bash
         run: |
           set -e
-
           if [ ! -f android/gradlew ]; then
             ZIP="Mis-Finanzas-Supabase-configurado.zip"
-
-            if [ ! -f "$ZIP" ]; then
-              echo "ERROR: No se encontró $ZIP"
-              ls -la
+            test -f "$ZIP" || {
+              echo "No se encontró el ZIP del proyecto"
               exit 1
-            fi
-
+            }
             unzip -oq "$ZIP" -d .
           fi
+          test -f package.json
+          test -f package-lock.json
+          test -f android/gradlew
 
-          if [ ! -f android/gradlew ]; then
-            echo "ERROR: El ZIP no contiene android/gradlew"
-            find . -maxdepth 4 -name gradlew -print
-            exit 1
-          fi
+      - name: Instalar dependencias
+        run: npm ci
 
-          chmod +x android/gradlew
-          echo "Proyecto extraído correctamente."
+      - name: Sincronizar Capacitor
+        run: npx cap sync android
 
       - name: Compilar APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
