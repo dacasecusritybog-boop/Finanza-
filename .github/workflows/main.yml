@@ -4,7 +4,8 @@ name: Compilar Mis Finanzas APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -17,62 +18,72 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java 21
+      - name: Configurar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Configurar Node.js
+      - name: Configurar Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
 
-      - name: Preparar Android SDK
+      - name: Preparar SDK Android
         uses: android-actions/setup-android@v3
-        with:
-          packages: ''
 
-      - name: Instalar SDK Android
+      - name: Instalar herramientas Android
         run: |
           sdkmanager --install \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Extraer proyecto
+      - name: Extraer y localizar proyecto
         shell: bash
         run: |
           set -e
-          if [ ! -f android/gradlew ]; then
-            ZIP="Mis-Finanzas-Supabase-configurado.zip"
-            test -f "$ZIP" || {
-              echo "No se encontró el ZIP del proyecto"
-              exit 1
-            }
-            unzip -oq "$ZIP" -d .
+          ZIP="Mis-Finanzas-Supabase-configurado.zip"
+          if [ -f "$ZIP" ]; then
+            unzip -oq "$ZIP" -d proyecto-extraido
           fi
-          test -f package.json
-          test -f package-lock.json
-          test -f android/gradlew
+
+          PACKAGE=$(find . -name package.json \
+            -not -path '*/node_modules/*' \
+            -not -path '*/.git/*' -print -quit)
+
+          if [ -z "$PACKAGE" ]; then
+            echo "ERROR: No se encontró package.json"
+            exit 1
+          fi
+
+          DIR=$(dirname "$PACKAGE")
+          test -f "$DIR/android/gradlew" || {
+            echo "ERROR: Falta android/gradlew en $DIR"
+            exit 1
+          }
+
+          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
 
       - name: Instalar dependencias
-        run: npm ci
+        run: |
+          cd "$PROJECT_DIR"
+          npm install
 
-      - name: Sincronizar Capacitor
-        run: npx cap sync android
+      - name: Sincronizar Android
+        run: |
+          cd "$PROJECT_DIR"
+          npx cap sync android
 
       - name: Compilar APK
-        working-directory: android
         run: |
+          cd "$PROJECT_DIR/android"
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Publicar APK
+      - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: Mis-Finanzas-APK
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 7
