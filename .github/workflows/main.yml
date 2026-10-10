@@ -24,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Preparar Android SDK manualmente
+      - name: Preparar Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: ''
@@ -36,20 +36,35 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Revisar estructura del proyecto
+      - name: Extraer proyecto
+        shell: bash
         run: |
-          echo "Archivos disponibles:"
-          ls -la
+          set -e
+
           if [ ! -f android/gradlew ]; then
-            echo "ERROR: No existe android/gradlew"
+            ZIP="Mis-Finanzas-Supabase-configurado.zip"
+
+            if [ ! -f "$ZIP" ]; then
+              echo "ERROR: No se encontró $ZIP"
+              ls -la
+              exit 1
+            fi
+
+            unzip -oq "$ZIP" -d .
+          fi
+
+          if [ ! -f android/gradlew ]; then
+            echo "ERROR: El ZIP no contiene android/gradlew"
+            find . -maxdepth 4 -name gradlew -print
             exit 1
           fi
 
+          chmod +x android/gradlew
+          echo "Proyecto extraído correctamente."
+
       - name: Compilar APK
         working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
