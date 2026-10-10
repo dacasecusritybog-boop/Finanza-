@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Descargar repositorio
@@ -24,34 +24,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Preparar Android SDK
+      - name: Preparar Android SDK manualmente
         uses: android-actions/setup-android@v3
+        with:
+          packages: ''
 
-      - name: Aceptar licencias e instalar SDK
+      - name: Instalar herramientas Android
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
-      - name: Extraer proyecto ZIP si es necesario
-        shell: bash
+      - name: Revisar estructura del proyecto
         run: |
-          set -e
+          echo "Archivos disponibles:"
+          ls -la
           if [ ! -f android/gradlew ]; then
-            ZIP_FILE=$(find . -maxdepth 1 -type f \
-              \( -name 'Mis-Finanzas-v1.3-GitHub-listo*.zip' \
-              -o -name 'Mis-Finanzas-Supabase-configurado.zip' \) \
-              -print -quit)
-
-            if [ -z "$ZIP_FILE" ]; then
-              echo "ERROR: No se encontró el ZIP del proyecto."
-              exit 1
-            fi
-
-            unzip -oq "$ZIP_FILE" -d .
-          fi
-
-          if [ ! -f android/gradlew ]; then
-            echo "ERROR: No se encontró android/gradlew."
+            echo "ERROR: No existe android/gradlew"
             exit 1
           fi
 
@@ -61,7 +51,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Guardar APK
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
           name: Mis-Finanzas-APK
