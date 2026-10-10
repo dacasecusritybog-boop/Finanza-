@@ -1,0 +1,70 @@
+
+name: Compilar Mis Finanzas APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Aceptar licencias e instalar SDK
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Extraer proyecto ZIP si es necesario
+        shell: bash
+        run: |
+          set -e
+          if [ ! -f android/gradlew ]; then
+            ZIP_FILE=$(find . -maxdepth 1 -type f \
+              \( -name 'Mis-Finanzas-v1.3-GitHub-listo*.zip' \
+              -o -name 'Mis-Finanzas-Supabase-configurado.zip' \) \
+              -print -quit)
+
+            if [ -z "$ZIP_FILE" ]; then
+              echo "ERROR: No se encontró el ZIP del proyecto."
+              exit 1
+            fi
+
+            unzip -oq "$ZIP_FILE" -d .
+          fi
+
+          if [ ! -f android/gradlew ]; then
+            echo "ERROR: No se encontró android/gradlew."
+            exit 1
+          fi
+
+      - name: Compilar APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Guardar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mis-Finanzas-APK
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
