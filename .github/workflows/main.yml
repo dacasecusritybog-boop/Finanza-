@@ -16,12 +16,40 @@ jobs:
       - name: Descargar código
         uses: actions/checkout@v4
 
+      - name: Localizar proyecto (raíz, subcarpeta o ZIP)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f capacitor.config.json ]; then
+            ZIP="$(find . -maxdepth 2 -type f -iname '*.zip' -not -path './.git/*' | head -n 1)"
+            if [ -n "$ZIP" ]; then
+              echo "Extrayendo $ZIP"
+              unzip -oq "$ZIP" -d _proyecto
+            fi
+          fi
+          if [ -f capacitor.config.json ]; then
+            DIR="."
+          else
+            CONFIG="$(find . -name capacitor.config.json -not -path '*/node_modules/*' -not -path '*/android/*' -not -path '*/ios/*' -not -path './.git/*' | head -n 1)"
+            if [ -z "$CONFIG" ]; then
+              echo "::error::No se encontró capacitor.config.json en el repositorio"
+              find . -maxdepth 3 -not -path './.git/*' | head -50
+              exit 1
+            fi
+            DIR="$(dirname "$CONFIG")"
+          fi
+          test -f "$DIR/package.json" || { echo "::error::No hay package.json en $DIR"; exit 1; }
+          test -f "$DIR/android/gradlew" || { echo "::error::No hay android/gradlew en $DIR"; exit 1; }
+          echo "Proyecto en: $DIR"
+          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+
       - name: Configurar Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Instalar dependencias de Capacitor
+        working-directory: ${{ env.PROJECT_DIR }}
         run: npm install
 
       - name: Configurar Java 21
@@ -36,19 +64,21 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;34.0.0 build-tools;35.0.0'
 
       - name: Sincronizar www con Android
+        working-directory: ${{ env.PROJECT_DIR }}
         run: npx cap sync android
 
       - name: Dar permisos a Gradle
+        working-directory: ${{ env.PROJECT_DIR }}
         run: chmod +x android/gradlew
 
       - name: Compilar APK
-        working-directory: android
+        working-directory: ${{ env.PROJECT_DIR }}/android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
           name: Mis-Finanzas-APK
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
